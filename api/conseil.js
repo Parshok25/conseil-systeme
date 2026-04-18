@@ -1,7 +1,3 @@
-const Anthropic = require("@anthropic-ai/sdk");
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -20,14 +16,30 @@ module.exports = async (req, res) => {
   try {
     const { system, messages } = req.body;
 
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      system,
-      messages,
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        system,
+        messages
+      })
     });
 
-    res.status(200).json({ content: response.content });
+    const data = await response.json();
+
+    if (!response.ok) {
+      res.status(500).json({ error: data.error?.message || "API error" });
+      return;
+    }
+
+    res.status(200).json({ content: data.content });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
