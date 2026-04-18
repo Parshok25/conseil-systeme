@@ -1,3 +1,5 @@
+const https = require("https");
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -9,52 +11,50 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    
-    if (!apiKey) {
-      res.status(500).json({ error: "Clé API manquante" });
-      return;
-    }
-
     const { system, messages } = req.body;
+    const apiKey = process.env.ANTHROPIC_API_KEY;
 
-    if (!system || !messages) {
-      res.status(500).json({ error: "Paramètres manquants", body: req.body });
-      return;
-    }
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        system,
-        messages
-      })
+    const payload = JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      system,
+      messages
     });
 
-    const data = await response.json();
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: "api.anthropic.com",
+        path: "/v1/messages",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Length": Buffer.byteLength(payload)
+        }
+      };
 
-    if (!response.ok) {
-      res.status(500).json({ 
-        error: "Erreur Anthropic", 
-        status: response.status,
-        details: data 
+      const request = https.request(options, (response) => {
+        let data = "";
+        response.on("data", chunk => data += chunk);
+        response.on("end", () => resolve({ status: response.statusCode, body: data }));
       });
+
+      request.on("error", reject);
+      request.write(payload);
+      request.end();
+    });
+
+    const data = JSON.parse(result.body);
+
+    if (result.status !== 200) {
+      res.status(500).json({ error: "Erreur Anthropic", details: data });
       return;
     }
 
     res.status(200).json({ content: data.content });
 
   } catch (error) {
-    res.status(500).json({ 
-      error: error.message,
-      stack: error.stack
-    });
+    res.status(500).json({ error: error.message });
   }
 };
