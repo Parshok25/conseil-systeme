@@ -8,19 +8,26 @@ module.exports = async (req, res) => {
     return;
   }
 
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    
+    if (!apiKey) {
+      res.status(500).json({ error: "Clé API manquante" });
+      return;
+    }
+
     const { system, messages } = req.body;
+
+    if (!system || !messages) {
+      res.status(500).json({ error: "Paramètres manquants", body: req.body });
+      return;
+    }
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -34,13 +41,20 @@ module.exports = async (req, res) => {
     const data = await response.json();
 
     if (!response.ok) {
-      res.status(500).json({ error: data.error?.message || "API error" });
+      res.status(500).json({ 
+        error: "Erreur Anthropic", 
+        status: response.status,
+        details: data 
+      });
       return;
     }
 
     res.status(200).json({ content: data.content });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack
+    });
   }
 };
